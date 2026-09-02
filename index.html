@@ -187,6 +187,8 @@ body {
   font-weight: 700; font-size: 13px; flex-shrink: 0;
 }
 .shift-ct { font: 400 10px/1 Arial, sans-serif; color: #7AAAD0; font-variant-numeric: tabular-nums; }
+.shift-vac  { font-weight: 700; color: #F0A868; }
+.shift-full { font-weight: 700; color: #6FD8B4; }
 .shift-body {
   flex: 1; overflow-y: auto; padding: 8px;
   display: flex; flex-direction: column; gap: 10px;
@@ -781,8 +783,13 @@ function renderShifts() {
       if (p) { var t = p.emp_type || 'unknown'; mix[t] = (mix[t] || 0) + 1; }
     });
 
-    hdr.innerHTML = '<span>' + esc(shift.label) + '</span><span class="shift-ct">'
-                  + filled + '/' + ROLES.length + ' filled</span>';
+    var vacant = ROLES.length - filled;
+    hdr.innerHTML = '<span>' + esc(shift.label) + '</span>'
+      + '<span class="shift-ct">' + filled + '/' + ROLES.length + ' filled'
+      + (vacant > 0
+          ? ' <span class="shift-vac">' + vacant + ' vacant</span>'
+          : ' <span class="shift-full">full</span>')
+      + '</span>';
     col.appendChild(hdr);
 
     var mixBar = document.createElement('div');
