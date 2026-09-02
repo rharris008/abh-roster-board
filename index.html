@@ -219,6 +219,12 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .mix-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.mix-chip.rollup {
+  padding: 1px 6px; border-radius: 3px; border: 1px solid var(--border);
+  background: var(--surface);
+}
+.mix-chip.rollup[data-state="ok"]    { color: var(--perm); border-color: var(--perm); }
+.mix-chip.rollup[data-state="short"] { color: var(--temp); border-color: var(--temp); }
 
 .area-slots { display: flex; flex-direction: column; gap: 3px; }
 
@@ -390,7 +396,14 @@ var AREAS = [
   { id: 'lineab', label: 'Line A / B',       crew: 4 },
   { id: 'bottle', label: 'Bottle Line',      crew: 5 },
   { id: 'fork',   label: 'Forklift',         crew: 3 },
-  { id: 'float',  label: '2L Line',          crew: 7 }
+  { id: 'float',  label: 'Float',            crew: 2 }
+];
+
+// The 2L line is not its own section: it is the Bottle Line crew plus the two
+// float roles, 5 + 2 = 7 (Rob 02/09/2026). Rolled up per shift so the total is
+// visible without duplicating slots.
+var ROLLUPS = [
+  { label: '2L line', areas: ['bottle', 'float'], crew: 7 }
 ];
 
 var ROLES = [
@@ -411,15 +424,8 @@ var ROLES = [
   { id: 'feed-forklift',            label: 'Production Feed Forklift',      area: 'fork'   },
   { id: 'wrap-forklift-1',          label: 'Pallet Wrap Forklift',          area: 'fork'   },
   { id: 'wrap-forklift-2',          label: 'Pallet Wrap Forklift',          area: 'fork'   },
-  // 2L line runs a crew of 7. The two named roles are Rob's; the five below are
-  // placeholder slots so seven people can actually be rostered. Rename on request.
   { id: 'bottle-filler-2l-float',   label: '2L Bottle Filler (Float)',      area: 'float'  },
-  { id: 'overpacker-2l',            label: '2L Overpacker (Float)',         area: 'float'  },
-  { id: 'operator-2l-1',            label: '2L Operator',                   area: 'float'  },
-  { id: 'operator-2l-2',            label: '2L Operator',                   area: 'float'  },
-  { id: 'operator-2l-3',            label: '2L Operator',                   area: 'float'  },
-  { id: 'packoff-2l-1',             label: '2L Pack Off',                   area: 'float'  },
-  { id: 'packoff-2l-2',             label: '2L Pack Off',                   area: 'float'  }
+  { id: 'overpacker-2l',            label: '2L Overpacker (Float)',         area: 'float'  }
 ];
 
 var TYPE_LABEL = { permanent: 'Permanent', casual: 'Casual', temp: 'Temp',
@@ -793,6 +799,16 @@ function renderShifts() {
         return '<span class="mix-chip"><span class="mix-dot" style="background:' + o[2]
              + '"></span>' + mix[o[0]] + ' ' + o[1] + '</span>';
       }).join('') || '<span class="mix-chip" style="color:var(--vacant-txt)">nobody rostered yet</span>';
+
+    // 2L line total: bottle line plus the float roles.
+    ROLLUPS.forEach(function(ru) {
+      var n = ROLES.filter(function(r) {
+        return ru.areas.indexOf(r.area) !== -1 && roster[shift.id][r.id];
+      }).length;
+      mixBar.insertAdjacentHTML('afterbegin',
+        '<span class="mix-chip rollup" data-state="' + (n >= ru.crew ? 'ok' : 'short') + '">'
+        + esc(ru.label) + ' ' + n + '/' + ru.crew + '</span>');
+    });
     col.appendChild(mixBar);
 
     var body = document.createElement('div');
