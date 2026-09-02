@@ -270,7 +270,8 @@ body {
   <div class="hdr-actions">
     <span id="conn" data-state="loading"><span id="connDot"></span><span id="connText">Connecting</span></span>
     <button class="btn" id="whoBtn" title="Who you are, shown to the others">Set your name</button>
-    <button class="btn accent" id="btnRefresh">Refresh</button>
+    <button class="btn accent" id="btnAddTemp">+ Temp</button>
+    <button class="btn" id="btnRefresh">Refresh</button>
     <button class="btn" id="btnClear">Clear shift</button>
     <button class="btn" id="btnCSV">Export CSV</button>
     <button class="btn" id="btnPrint">Print</button>
@@ -293,6 +294,7 @@ body {
         <option value="Sched A">Sched A</option>
         <option value="Sched B">Sched B</option>
         <option value="Unassigned">Unassigned</option>
+        <option value="Temp">Temps</option>
       </select>
     </div>
     <div class="pool-count" id="poolCount">Loading</div>
@@ -584,6 +586,39 @@ function cycleType(person) {
       renderAll();
       conn('offline', 'Save failed');
       toast('Not saved: ' + err.message, 'err');
+    });
+}
+
+// Adds one more temp to the pool. The database policy only accepts rows whose id
+// starts with 'temp-' and whose type is 'temp', so this button cannot be repurposed
+// to inject a fake staff member.
+function addTemp() {
+  var n = 0;
+  people.forEach(function(p) {
+    var m = /^temp-(\d+)$/.exec(p.id);
+    if (m) n = Math.max(n, parseInt(m[1], 10));
+  });
+  n += 1;
+  var name = prompt('Name for this temp, or leave as is:', 'Temp ' + n);
+  if (name === null) return;
+  name = (name.trim() || ('Temp ' + n)).slice(0, 40);
+
+  var row = { id: 'temp-' + n, name: name, line: 'Temp pool', cohort: 'Temp',
+              emp_type: 'temp', active: true, sort_order: 900 + n };
+
+  conn('saving', 'Saving');
+  pausePolling = true;
+  sbSend('POST', 'roster_people', row)
+    .then(function() {
+      people.push(row);
+      renderAll();
+      conn('live', 'Live');
+      pausePolling = false;
+      toast(name + ' added');
+    })['catch'](function(err) {
+      conn('offline', 'Save failed');
+      pausePolling = false;
+      toast('Could not add temp: ' + err.message, 'err');
     });
 }
 
@@ -886,6 +921,7 @@ document.getElementById('poolCohort').addEventListener('change', renderPool);
 document.getElementById('btnRefresh').addEventListener('click', function() {
   loadAll().then(function() { toast('Refreshed from Supabase'); });
 });
+document.getElementById('btnAddTemp').addEventListener('click', addTemp);
 document.getElementById('btnClear').addEventListener('click', clearShift);
 document.getElementById('btnCSV').addEventListener('click', exportCSV);
 document.getElementById('btnPrint').addEventListener('click', function() { window.print(); });
