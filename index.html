@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ABH Shift Roster Board</title>
+<style>
+:root {
+  --navy:       #1B2A4A;
+  --blue:       #0E7CCE;
+  --bg:         #EAF0F7;
+  --surface:    #FFFFFF;
+  --surface2:   #F4F7FB;
+  --border:     #CDD7E5;
+  --text:       #1B2A4A;
+  --muted:      #5E7494;
+  --vacant-bd:  #B0BFD0;
+  --vacant-txt: #8A9DB5;
+  --perm:       #1AAD8B;
+  --temp:       #E67E22;
+  --contr:      #8044C0;
+  --unk:        #8A9DB5;
+  --red:        #C0392B;
+  --green:      #27AE60;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1B2E; --surface: #162032; --surface2: #1C2A40; --border: #253548;
+    --text: #D8E6F2; --muted: #7A96B2; --vacant-bd: #2E4060; --vacant-txt: #5A7090;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1B2E; --surface: #162032; --surface2: #1C2A40; --border: #253548;
+  --text: #D8E6F2; --muted: #7A96B2; --vacant-bd: #2E4060; --vacant-txt: #5A7090;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: Arial, sans-serif; background: var(--bg); color: var(--text);
+  font-size: 13px; height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
+}
+
+/* HEADER */
+#hdr {
+  background: var(--navy); color: #fff; padding: 8px 14px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,.35); z-index: 50;
+}
+.hdr-left { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.hdr-brand { font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase; color: #7AAAD0; }
+.hdr-name  { font-size: 15px; font-weight: 700; }
+
+#hdrStats { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; align-items: center; }
+.stat-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+  border-radius: 10px; padding: 2px 9px; font-size: 10px; font-weight: 700;
+  white-space: nowrap; color: #fff; font-variant-numeric: tabular-nums;
+}
+.stat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+.hdr-actions { display: flex; gap: 5px; flex-wrap: wrap; flex-shrink: 0; align-items: center; }
+.btn {
+  padding: 4px 11px; border: 1px solid rgba(255,255,255,.28);
+  background: rgba(255,255,255,.1); color: #fff; border-radius: 3px;
+  font: 700 10px/1.4 Arial, sans-serif; letter-spacing: .3px;
+  cursor: pointer; white-space: nowrap;
+}
+.btn:hover { background: rgba(255,255,255,.2); }
+.btn:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.btn.accent { background: var(--blue); border-color: var(--blue); }
+.btn.accent:hover { background: #0960B0; }
+
+/* Connection lamp */
+#conn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: 700 10px/1 Arial, sans-serif; color: #fff;
+  padding: 3px 9px; border-radius: 10px;
+  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+  white-space: nowrap;
+}
+#connDot { width: 7px; height: 7px; border-radius: 50%; background: var(--unk); flex-shrink: 0; }
+#conn[data-state="live"]    #connDot { background: var(--green); }
+#conn[data-state="saving"]  #connDot { background: var(--temp); }
+#conn[data-state="offline"] #connDot { background: var(--red); }
+
+/* LEGEND */
+#legend {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 5px 14px; display: flex; gap: 14px; align-items: center;
+  flex-wrap: wrap; flex-shrink: 0;
+}
+.leg { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); }
+.leg-bar { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+.leg-hint { font-size: 10px; color: var(--muted); margin-left: auto; }
+
+/* LAYOUT */
+#layout { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+
+/* POOL */
+#pool {
+  width: 208px; flex-shrink: 0; background: var(--surface);
+  border-right: 1px solid var(--border); display: flex;
+  flex-direction: column; overflow: hidden;
+}
+.pool-hdr {
+  background: var(--navy); color: #fff; padding: 7px 10px;
+  font: 700 10px/1 Arial, sans-serif; letter-spacing: .8px;
+  text-transform: uppercase; flex-shrink: 0;
+}
+.pool-filter {
+  padding: 6px; display: flex; flex-direction: column; gap: 4px;
+  border-bottom: 1px solid var(--border); background: var(--surface2); flex-shrink: 0;
+}
+.pool-filter input, .pool-filter select {
+  width: 100%; padding: 4px 6px; font: 400 11px/1.3 Arial, sans-serif;
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 3px;
+}
+.pool-filter input:focus-visible, .pool-filter select:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: -1px;
+}
+.pool-count {
+  padding: 5px 10px; font-size: 10px; color: var(--muted);
+  border-bottom: 1px solid var(--border); background: var(--surface2); flex-shrink: 0;
+}
+#pool-list {
+  flex: 1; overflow-y: auto; padding: 6px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+#pool-list.drop-ready {
+  background: rgba(14,124,206,.05); outline: 2px dashed var(--blue);
+  outline-offset: -4px; border-radius: 3px;
+}
+.pool-empty {
+  padding: 20px 10px; text-align: center; color: var(--muted);
+  font-size: 11px; line-height: 1.7;
+}
+
+/* PERSON CARD */
+.pcard {
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 4px solid var(--unk); border-radius: 3px; padding: 5px 8px;
+  cursor: grab; user-select: none; position: relative; transition: box-shadow .12s;
+}
+.pcard:active { cursor: grabbing; }
+.pcard:hover  { box-shadow: 0 2px 7px rgba(0,0,0,.14); }
+.pcard.dragging { opacity: .45; }
+.pcard.selected { outline: 2px solid var(--blue); outline-offset: -1px; background: rgba(14,124,206,.06); }
+.pcard[data-type="permanent"]  { border-left-color: var(--perm); }
+.pcard[data-type="temp"]       { border-left-color: var(--temp); }
+.pcard[data-type="contractor"] { border-left-color: var(--contr); }
+.pcard[data-type="unknown"]    { border-left-color: var(--unk); }
+
+.pc-name { font: 700 12px/1.3 Arial, sans-serif; padding-right: 14px; }
+.pc-sub  { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.pc-row  { display: flex; gap: 4px; align-items: center; margin-top: 3px; flex-wrap: wrap; }
+.pc-badge {
+  font: 700 9px/1 Arial, sans-serif; padding: 2px 5px; border-radius: 2px;
+  background: rgba(14,124,206,.12); color: var(--blue);
+  letter-spacing: .4px; text-transform: uppercase;
+}
+.pc-type {
+  font: 700 9px/1 Arial, sans-serif; padding: 2px 5px; border-radius: 2px;
+  border: 1px solid var(--border); background: transparent; color: var(--muted);
+  cursor: pointer; letter-spacing: .4px; text-transform: uppercase;
+}
+.pc-type:hover { border-color: var(--blue); color: var(--blue); }
+.pcard[data-type="permanent"]  .pc-type { color: var(--perm);   border-color: var(--perm); }
+.pcard[data-type="temp"]       .pc-type { color: var(--temp);   border-color: var(--temp); }
+.pcard[data-type="contractor"] .pc-type { color: var(--contr);  border-color: var(--contr); }
+
+/* SHIFTS */
+#shifts { flex: 1; display: flex; overflow-x: auto; overflow-y: hidden; min-width: 0; }
+.shift-col {
+  min-width: 232px; flex: 1; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.shift-col:last-child { border-right: none; }
+.shift-hdr {
+  background: var(--navy); color: #fff; padding: 7px 11px;
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-weight: 700; font-size: 13px; flex-shrink: 0;
+}
+.shift-ct { font: 400 10px/1 Arial, sans-serif; color: #7AAAD0; font-variant-numeric: tabular-nums; }
+.shift-body {
+  flex: 1; overflow-y: auto; padding: 8px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.area-hdr {
+  font: 700 9px/1 Arial, sans-serif; letter-spacing: .9px; text-transform: uppercase;
+  color: var(--muted); padding-bottom: 4px;
+  border-bottom: 1px solid var(--border); margin-bottom: 4px;
+}
+.area-slots { display: flex; flex-direction: column; gap: 3px; }
+
+.slot-label {
+  font: 700 9px/1 Arial, sans-serif; letter-spacing: .3px;
+  text-transform: uppercase; color: var(--muted); padding: 0 2px 2px;
+}
+.slot { border-radius: 3px; min-height: 50px; }
+.slot.vacant {
+  border: 1.5px dashed var(--vacant-bd); padding: 7px 9px; cursor: pointer;
+  display: flex; flex-direction: column; justify-content: center;
+  transition: background .1s, border-color .1s;
+}
+.slot.vacant:hover, .slot.vacant.can-drop { background: rgba(14,124,206,.06); border-color: var(--blue); }
+.slot.vacant.drag-over { background: rgba(14,124,206,.1); border-color: var(--blue); border-style: solid; }
+.slot-role-name { font: 600 11px/1.3 Arial, sans-serif; color: var(--muted); }
+.slot-vacant-tag { font-size: 10px; color: var(--vacant-txt); margin-top: 1px; }
+.slot.filled { padding: 0; }
+.slot.filled .pcard { border-radius: 3px; }
+
+.remove-btn {
+  position: absolute; top: 4px; right: 4px; width: 15px; height: 15px;
+  border-radius: 50%; background: rgba(192,57,43,.75); color: #fff; border: none;
+  font: 700 10px/1 Arial, sans-serif; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; z-index: 5;
+}
+.remove-btn:hover { background: var(--red); }
+
+#toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--navy); color: #fff; padding: 8px 18px; border-radius: 4px;
+  font-size: 12px; font-weight: 700; box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  z-index: 999; opacity: 0; pointer-events: none; transition: opacity .2s; white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+#toast[data-kind="err"] { background: var(--red); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+@media print {
+  body { height: auto; overflow: visible; background: #fff; color: #000; }
+  #layout { display: block; height: auto; overflow: visible; }
+  #pool, #legend { display: none; }
+  #shifts { display: flex; overflow: visible; }
+  .shift-col, .shift-body { overflow: visible; }
+  .remove-btn, .hdr-actions, .pc-type { display: none !important; }
+  .pcard { break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .shift-hdr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+@media (max-width: 600px) {
+  body { height: auto; overflow: auto; }
+  #layout { flex-direction: column; overflow: visible; height: auto; }
+  #pool { width: 100%; max-height: 230px; border-right: none; border-bottom: 1px solid var(--border); }
+  .pool-filter { flex-direction: row; }
+  #pool-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+  .pcard { min-width: 140px; flex-shrink: 0; }
+  #shifts { flex-direction: column; overflow: visible; }
+  .shift-col { border-right: none; border-bottom: 1px solid var(--border); }
+  .shift-body { overflow: visible; }
+}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div class="hdr-left">
+    <span class="hdr-brand">ABH Pureau</span>
+    <span class="hdr-name">Shift Roster Board</span>
+  </div>
+  <div id="hdrStats"></div>
+  <div class="hdr-actions">
+    <span id="conn" data-state="loading"><span id="connDot"></span><span id="connText">Connecting</span></span>
+    <button class="btn accent" id="btnRefresh">Refresh</button>
+    <button class="btn" id="btnClear">Clear shift</button>
+    <button class="btn" id="btnCSV">Export CSV</button>
+    <button class="btn" id="btnPrint">Print</button>
+  </div>
+</div>
+
+<div id="legend">
+  <span style="font:700 9px/1 Arial,sans-serif;letter-spacing:.9px;text-transform:uppercase;color:var(--muted)">Employment</span>
+  <span class="leg"><span class="leg-bar" style="background:var(--perm)"></span>Permanent</span>
+  <span class="leg"><span class="leg-bar" style="background:var(--temp)"></span>Temp</span>
+  <span class="leg"><span class="leg-bar" style="background:var(--contr)"></span>Contractor</span>
+  <span class="leg"><span class="leg-bar" style="background:var(--unk)"></span>Not confirmed</span>
+  <span class="leg-hint">Click the type chip on a card to change it. Changes save for everyone.</span>
+</div>
+
+<div id="layout">
+  <div id="pool">
+    <div class="pool-hdr">People Pool</div>
+    <div class="pool-filter">
+      <input type="search" id="poolSearch" placeholder="Search name or line" aria-label="Filter people">
+      <select id="poolCohort" aria-label="Filter by schedule">
+        <option value="floor">Production floor</option>
+        <option value="">Everyone</option>
+        <option value="Sched A">Sched A</option>
+        <option value="Sched B">Sched B</option>
+        <option value="Unassigned">Unassigned</option>
+        <option value="Office">Office</option>
+      </select>
+    </div>
+    <div class="pool-count" id="poolCount">Loading</div>
+    <div id="pool-list"></div>
+  </div>
+  <div id="shifts"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── SUPABASE ────────────────────────────────────────────────────────────────
+// This key is a PUBLISHABLE key and is meant to be visible in page source.
+// The protection is server side: roster_people is SELECT-only to anon, with a
+// column-level grant allowing emp_type and nothing else to be updated. The
+// table holds names and production lines only. It has no email, phone, address,
+// pay or HR column, and none may ever be added.
+var SB_URL = 'https://yxaebxkkclbjezffmerw.supabase.co';
+var SB_KEY = 'sb_publishable_yLmaFw0myJv-rHuCC2LsHw_WW7d8lJn';
+
+function sbHeaders(extra) {
+  var h = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
+  if (extra) { for (var k in extra) h[k] = extra[k]; }
+  return h;
+}
+
+function sbGet(path) {
+  return fetch(SB_URL + '/rest/v1/' + path, { headers: sbHeaders() })
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+}
+
+function sbSend(method, path, body) {
+  return fetch(SB_URL + '/rest/v1/' + path, {
+    method: method,
+    headers: sbHeaders({ 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' }),
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r;
+  });
+}
+
+// ── MODEL ───────────────────────────────────────────────────────────────────
+
+var SHIFTS = [
+  { id: 'day',       label: 'Day Shift' },
+  { id: 'afternoon', label: 'Afternoon Shift' },
+  { id: 'night',     label: 'Night Shift' }
+];
+
+var AREAS = [
+  { id: 'mgmt',   label: 'Shift Management' },
+  { id: 'hmps',   label: 'HMPS' },
+  { id: 'lineab', label: 'Line A / B' },
+  { id: 'bottle', label: 'Bottle Line' },
+  { id: 'fork',   label: 'Forklift' },
+  { id: 'float',  label: 'Float' }
+];
+
+var ROLES = [
+  { id: 'shift-leader',             label: 'Shift Leader',                  area: 'mgmt'   },
+  { id: 'hmps-operator',            label: 'HMPS Operator',                 area: 'hmps'   },
+  { id: 'hmps-packoff-1',           label: 'HMPS Pack Off',                 area: 'hmps'   },
+  { id: 'hmps-packoff-2',           label: 'HMPS Pack Off',                 area: 'hmps'   },
+  { id: 'line-a-operator',          label: 'Line A Operator',               area: 'lineab' },
+  { id: 'line-b-operator',          label: 'Line B Operator',               area: 'lineab' },
+  { id: 'line-ab-packoff-1',        label: 'Line AB Pack Off / Overpacker', area: 'lineab' },
+  { id: 'line-ab-packoff-2',        label: 'Line AB Pack Off / Overpacker', area: 'lineab' },
+  { id: 'bottle-filler',            label: 'Bottle Filler',                 area: 'bottle' },
+  { id: 'filling-machine-operator', label: 'Filling Machine Operator',      area: 'bottle' },
+  { id: 'labeller-shrink-operator', label: 'Labeller / Shrink Operator',    area: 'bottle' },
+  { id: 'bottle-packoff-1',         label: 'Bottle Pack Off',               area: 'bottle' },
+  { id: 'bottle-packoff-2',         label: 'Bottle Pack Off',               area: 'bottle' },
+  { id: 'feed-forklift',            label: 'Production Feed Forklift',      area: 'fork'   },
+  { id: 'wrap-forklift-1',          label: 'Pallet Wrap Forklift',          area: 'fork'   },
+  { id: 'wrap-forklift-2',          label: 'Pallet Wrap Forklift',          area: 'fork'   },
+  { id: 'overpacker-2l',            label: '2L Overpacker (Float)',         area: 'float'  }
+];
+
+var TYPE_LABEL = { permanent: 'Permanent', temp: 'Temp', contractor: 'Contractor', unknown: 'Not confirmed' };
+var TYPE_SHORT = { permanent: 'Perm', temp: 'Temp', contractor: 'Contr', unknown: 'Set type' };
+var TYPE_CYCLE = ['unknown', 'permanent', 'temp', 'contractor'];
+
+// Nothing is hardcoded. Both arrive from Supabase on load.
+var people = [];
+var roster  = { day: {}, afternoon: {}, night: {} };
+
+var selPersonId = null, selFromSlot = null;
+var dragPersonId = null, dragFromSlot = null;
+
+function getPerson(id) {
+  for (var i = 0; i < people.length; i++) { if (people[i].id === id) return people[i]; }
+  return null;
+}
+function isAssigned(pid) {
+  for (var i = 0; i < SHIFTS.length; i++) {
+    if (Object.values(roster[SHIFTS[i].id]).indexOf(pid) !== -1) return true;
+  }
+  return false;
+}
+function unassignedPeople() {
+  return people.filter(function(p) { return !isAssigned(p.id); });
+}
+
+// ── STATUS + TOAST ──────────────────────────────────────────────────────────
+
+function conn(state, text) {
+  var el = document.getElementById('conn');
+  el.dataset.state = state;
+  document.getElementById('connText').textContent = text;
+}
+
+var toastTimer;
+function toast(msg, kind) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.dataset.kind = kind || 'ok';
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { el.classList.remove('show'); }, 2600);
+}
+
+// ── LOAD ────────────────────────────────────────────────────────────────────
+
+function loadAll() {
+  conn('loading', 'Loading');
+  return Promise.all([
+    sbGet('roster_people?select=id,name,line,cohort,emp_type&active=is.true&order=sort_order'),
+    sbGet('roster_assignments?select=shift_id,role_id,person_id')
+  ]).then(function(res) {
+    people = res[0];
+    roster = { day: {}, afternoon: {}, night: {} };
+    res[1].forEach(function(a) {
+      if (roster[a.shift_id] && a.person_id) roster[a.shift_id][a.role_id] = a.person_id;
+    });
+    conn('live', 'Live');
+    renderAll();
+  })['catch'](function(err) {
+    conn('offline', 'Offline');
+    renderAll();
+    toast('Could not reach Supabase (' + err.message + ')', 'err');
+  });
+}
+
+// ── WRITES ──────────────────────────────────────────────────────────────────
+
+function assign(personId, shiftId, roleId, fromSlot) {
+  var prev = JSON.stringify(roster);
+  if (fromSlot) {
+    var f = fromSlot.split(':');
+    if (roster[f[0]] && roster[f[0]][f[1]] === personId) delete roster[f[0]][f[1]];
+  }
+  roster[shiftId][roleId] = personId;
+  selPersonId = null; selFromSlot = null;
+  renderAll();
+
+  conn('saving', 'Saving');
+  var chain = fromSlot
+    ? sbSend('DELETE', 'roster_assignments?shift_id=eq.' + fromSlot.split(':')[0] +
+                       '&role_id=eq.' + encodeURIComponent(fromSlot.split(':')[1]))
+    : Promise.resolve();
+
+  chain.then(function() {
+    return sbSend('POST', 'roster_assignments',
+      { shift_id: shiftId, role_id: roleId, person_id: personId });
+  }).then(function() {
+    conn('live', 'Live');
+  })['catch'](function(err) {
+    roster = JSON.parse(prev);
+    renderAll();
+    conn('offline', 'Save failed');
+    toast('Not saved: ' + err.message, 'err');
+  });
+}
+
+function unassign(shiftId, roleId) {
+  var prev = JSON.stringify(roster);
+  delete roster[shiftId][roleId];
+  selPersonId = null; selFromSlot = null;
+  renderAll();
+
+  conn('saving', 'Saving');
+  sbSend('DELETE', 'roster_assignments?shift_id=eq.' + shiftId +
+                   '&role_id=eq.' + encodeURIComponent(roleId))
+    .then(function() { conn('live', 'Live'); })
+    ['catch'](function(err) {
+      roster = JSON.parse(prev);
+      renderAll();
+      conn('offline', 'Save failed');
+      toast('Not saved: ' + err.message, 'err');
+    });
+}
+
+function cycleType(person) {
+  var i = TYPE_CYCLE.indexOf(person.emp_type || 'unknown');
+  var next = TYPE_CYCLE[(i + 1) % TYPE_CYCLE.length];
+  var prev = person.emp_type;
+  person.emp_type = next;
+  renderAll();
+
+  conn('saving', 'Saving');
+  sbSend('PATCH', 'roster_people?id=eq.' + encodeURIComponent(person.id), { emp_type: next })
+    .then(function() { conn('live', 'Live'); })
+    ['catch'](function(err) {
+      person.emp_type = prev;
+      renderAll();
+      conn('offline', 'Save failed');
+      toast('Not saved: ' + err.message, 'err');
+    });
+}
+
+function clearShift() {
+  var which = prompt('Clear which shift? Type day, afternoon or night.');
+  if (!which) return;
+  which = which.trim().toLowerCase();
+  if (['day','afternoon','night'].indexOf(which) === -1) { toast('Unknown shift', 'err'); return; }
+  var n = Object.keys(roster[which]).length;
+  if (!n) { toast('That shift is already empty'); return; }
+  if (!confirm('Remove all ' + n + ' assignments from the ' + which + ' shift?')) return;
+
+  conn('saving', 'Saving');
+  sbSend('DELETE', 'roster_assignments?shift_id=eq.' + which)
+    .then(function() { toast('Cleared ' + which + ' shift'); return loadAll(); })
+    ['catch'](function(err) { conn('offline', 'Save failed'); toast('Not cleared: ' + err.message, 'err'); });
+}
+
+// ── RENDER ──────────────────────────────────────────────────────────────────
+
+function buildPersonCard(person, fromSlot) {
+  var div = document.createElement('div');
+  var t = person.emp_type || 'unknown';
+  div.className = 'pcard' + (selPersonId === person.id ? ' selected' : '');
+  div.dataset.type = t;
+  div.draggable = true;
+
+  var cohortBadge = person.cohort ? '<span class="pc-badge">' + esc(person.cohort) + '</span>' : '';
+  div.innerHTML =
+      '<div class="pc-name">' + esc(person.name) + '</div>'
+    + '<div class="pc-sub">' + esc(person.line || '') + '</div>'
+    + '<div class="pc-row">' + cohortBadge
+    + '<button class="pc-type" type="button" title="Click to change employment type">'
+    + TYPE_SHORT[t] + '</button></div>';
+
+  div.querySelector('.pc-type').addEventListener('click', function(e) {
+    e.stopPropagation();
+    cycleType(person);
+  });
+
+  var pid = person.id, fs = fromSlot;
+  div.addEventListener('dragstart', function(e) {
+    dragPersonId = pid; dragFromSlot = fs;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', pid);
+    requestAnimationFrame(function() { div.classList.add('dragging'); });
+  });
+  div.addEventListener('dragend', function() { div.classList.remove('dragging'); });
+  div.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (selPersonId === pid) { selPersonId = null; selFromSlot = null; }
+    else { selPersonId = pid; selFromSlot = fs; }
+    renderAll();
+  });
+  return div;
+}
+
+function passesFilter(p, q, cohort) {
+  if (cohort === 'floor') {
+    if (p.cohort === 'Office') return false;
+    if ((p.line || '').indexOf('Not on floor') === 0) return false;
+  } else if (cohort && p.cohort !== cohort) {
+    return false;
+  }
+  if (!q) return true;
+  return (p.name + ' ' + (p.line || '') + ' ' + (p.cohort || '')).toLowerCase().indexOf(q) !== -1;
+}
+
+function renderPool() {
+  var list = document.getElementById('pool-list');
+  list.innerHTML = '';
+  var q = (document.getElementById('poolSearch').value || '').trim().toLowerCase();
+  var cohort = document.getElementById('poolCohort').value;
+  var un = unassignedPeople();
+  var shown = un.filter(function(p) { return passesFilter(p, q, cohort); });
+
+  document.getElementById('poolCount').textContent =
+    !people.length ? 'No people loaded'
+    : shown.length === un.length ? un.length + ' unassigned'
+    : shown.length + ' of ' + un.length + ' unassigned';
+
+  if (!shown.length) {
+    var e = document.createElement('div');
+    e.className = 'pool-empty';
+    e.innerHTML = !people.length
+      ? 'Nothing loaded from Supabase.<br><small>Press Refresh.</small>'
+      : (un.length ? 'No one matches this filter'
+                   : 'All staff assigned<br><small>Drag a card here to unassign</small>');
+    list.appendChild(e);
+  } else {
+    shown.forEach(function(p) { list.appendChild(buildPersonCard(p, null)); });
+  }
+}
+
+function renderShifts() {
+  var area = document.getElementById('shifts');
+  area.innerHTML = '';
+
+  SHIFTS.forEach(function(shift) {
+    var filled = Object.keys(roster[shift.id]).length;
+    var col = document.createElement('div');
+    col.className = 'shift-col';
+
+    var hdr = document.createElement('div');
+    hdr.className = 'shift-hdr';
+    hdr.innerHTML = '<span>' + esc(shift.label) + '</span><span class="shift-ct">'
+                  + filled + '/' + ROLES.length + ' filled</span>';
+    col.appendChild(hdr);
+
+    var body = document.createElement('div');
+    body.className = 'shift-body';
+
+    AREAS.forEach(function(areaObj) {
+      var areaRoles = ROLES.filter(function(r) { return r.area === areaObj.id; });
+      if (!areaRoles.length) return;
+
+      var section = document.createElement('div');
+      var aHdr = document.createElement('div');
+      aHdr.className = 'area-hdr';
+      aHdr.textContent = areaObj.label;
+      section.appendChild(aHdr);
+
+      var slots = document.createElement('div');
+      slots.className = 'area-slots';
+
+      areaRoles.forEach(function(role) {
+        var pid = roster[shift.id][role.id];
+        var person = pid ? getPerson(pid) : null;
+
+        var wrapper = document.createElement('div');
+        var lbl = document.createElement('div');
+        lbl.className = 'slot-label';
+        lbl.textContent = role.label;
+        wrapper.appendChild(lbl);
+
+        var slot = document.createElement('div');
+        slot.className = 'slot';
+
+        if (person) {
+          slot.classList.add('filled');
+          var card = buildPersonCard(person, shift.id + ':' + role.id);
+          var rm = document.createElement('button');
+          rm.className = 'remove-btn';
+          rm.textContent = 'x';
+          rm.title = 'Unassign';
+          (function(si, ri) {
+            rm.addEventListener('click', function(e) { e.stopPropagation(); unassign(si, ri); });
+          })(shift.id, role.id);
+          card.appendChild(rm);
+          slot.appendChild(card);
+        } else {
+          slot.classList.add('vacant');
+          if (selPersonId) slot.classList.add('can-drop');
+          slot.innerHTML = '<div class="slot-role-name">' + esc(role.label)
+                         + '</div><div class="slot-vacant-tag">Vacant</div>';
+          (function(si, ri) {
+            slot.addEventListener('click', function() {
+              if (selPersonId) assign(selPersonId, si, ri, selFromSlot);
+            });
+          })(shift.id, role.id);
+        }
+
+        slot.addEventListener('dragover', function(e) { e.preventDefault(); slot.classList.add('drag-over'); });
+        slot.addEventListener('dragleave', function() { slot.classList.remove('drag-over'); });
+        (function(si, ri, s) {
+          s.addEventListener('drop', function(e) {
+            e.preventDefault(); s.classList.remove('drag-over');
+            if (dragPersonId) assign(dragPersonId, si, ri, dragFromSlot);
+          });
+        })(shift.id, role.id, slot);
+
+        wrapper.appendChild(slot);
+        slots.appendChild(wrapper);
+      });
+
+      section.appendChild(slots);
+      body.appendChild(section);
+    });
+
+    col.appendChild(body);
+    area.appendChild(col);
+  });
+}
+
+function renderStats() {
+  var el = document.getElementById('hdrStats');
+  el.innerHTML = '';
+  var filled = 0;
+  var ct = { permanent: 0, temp: 0, contractor: 0, unknown: 0 };
+  var total = SHIFTS.length * ROLES.length;
+  SHIFTS.forEach(function(s) {
+    Object.values(roster[s.id]).forEach(function(pid) {
+      filled++;
+      var p = getPerson(pid);
+      if (p) { var t = p.emp_type || 'unknown'; ct[t] = (ct[t] || 0) + 1; }
+    });
+  });
+  function pill(label, dot, n) {
+    var d = document.createElement('div');
+    d.className = 'stat-pill';
+    d.innerHTML = dot ? '<span class="stat-dot" style="background:' + dot + '"></span>' + n + ' ' + label
+                      : n + '/' + total + ' ' + label;
+    el.appendChild(d);
+  }
+  pill('filled', null, filled);
+  if (ct.permanent)  pill('perm',       'var(--perm)',  ct.permanent);
+  if (ct.temp)       pill('temp',       'var(--temp)',  ct.temp);
+  if (ct.contractor) pill('contractor', 'var(--contr)', ct.contractor);
+  if (ct.unknown)    pill('unconf',     'var(--unk)',   ct.unknown);
+}
+
+function renderAll() { renderPool(); renderShifts(); renderStats(); }
+
+// ── POOL AS UNASSIGN TARGET ─────────────────────────────────────────────────
+
+var poolList = document.getElementById('pool-list');
+poolList.addEventListener('dragover', function(e) { e.preventDefault(); poolList.classList.add('drop-ready'); });
+poolList.addEventListener('dragleave', function() { poolList.classList.remove('drop-ready'); });
+poolList.addEventListener('drop', function(e) {
+  e.preventDefault();
+  poolList.classList.remove('drop-ready');
+  if (dragFromSlot) { var f = dragFromSlot.split(':'); unassign(f[0], f[1]); }
+});
+
+// ── CSV ─────────────────────────────────────────────────────────────────────
+
+function exportCSV() {
+  var rows = [['Shift','Area','Role','Name','Employment Type','WFR Line','WFR Schedule']];
+  SHIFTS.forEach(function(s) {
+    AREAS.forEach(function(a) {
+      ROLES.filter(function(r) { return r.area === a.id; }).forEach(function(role) {
+        var pid = roster[s.id][role.id];
+        var p = pid ? getPerson(pid) : null;
+        rows.push([s.label, a.label, role.label,
+                   p ? p.name : '',
+                   p ? (TYPE_LABEL[p.emp_type] || '') : '',
+                   p ? (p.line || '') : '',
+                   p ? (p.cohort || '') : '']);
+      });
+    });
+  });
+  var csv = '﻿' + rows.map(function(r) {
+    return r.map(function(c) { return '"' + String(c || '').replace(/"/g, '""') + '"'; }).join(',');
+  }).join('\r\n');
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'production-roster-' + fmtDate() + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(a.href); }, 2000);
+  toast('CSV exported');
+}
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// AEST local date. Never toISOString: it slips the date across the UTC boundary.
+function fmtDate() {
+  var d = new Date();
+  return [String(d.getDate()).padStart(2,'0'),
+          String(d.getMonth()+1).padStart(2,'0'),
+          d.getFullYear()].join('-');
+}
+
+// ── WIRING ──────────────────────────────────────────────────────────────────
+
+document.getElementById('poolSearch').addEventListener('input', renderPool);
+document.getElementById('poolCohort').addEventListener('change', renderPool);
+document.getElementById('btnRefresh').addEventListener('click', function() {
+  loadAll().then(function() { toast('Refreshed from Supabase'); });
+});
+document.getElementById('btnClear').addEventListener('click', clearShift);
+document.getElementById('btnCSV').addEventListener('click', exportCSV);
+document.getElementById('btnPrint').addEventListener('click', function() { window.print(); });
+
+renderAll();
+loadAll();
+</script>
+</body>
+</html>
