@@ -17,6 +17,7 @@
   --vacant-bd:  #B0BFD0;
   --vacant-txt: #8A9DB5;
   --perm:       #1AAD8B;
+  --casual:     #0E7CCE;
   --temp:       #E67E22;
   --contr:      #8044C0;
   --unk:        #8A9DB5;
@@ -149,6 +150,7 @@ body {
 .pcard.dragging { opacity: .45; }
 .pcard.selected { outline: 2px solid var(--blue); outline-offset: -1px; background: rgba(14,124,206,.06); }
 .pcard[data-type="permanent"]  { border-left-color: var(--perm); }
+.pcard[data-type="casual"]     { border-left-color: var(--casual); }
 .pcard[data-type="temp"]       { border-left-color: var(--temp); }
 .pcard[data-type="contractor"] { border-left-color: var(--contr); }
 .pcard[data-type="unknown"]    { border-left-color: var(--unk); }
@@ -168,6 +170,7 @@ body {
 }
 .pc-type:hover { border-color: var(--blue); color: var(--blue); }
 .pcard[data-type="permanent"]  .pc-type { color: var(--perm);   border-color: var(--perm); }
+.pcard[data-type="casual"]     .pc-type { color: var(--casual); border-color: var(--casual); }
 .pcard[data-type="temp"]       .pc-type { color: var(--temp);   border-color: var(--temp); }
 .pcard[data-type="contractor"] .pc-type { color: var(--contr);  border-color: var(--contr); }
 
@@ -266,6 +269,7 @@ body {
   <div id="hdrStats"></div>
   <div class="hdr-actions">
     <span id="conn" data-state="loading"><span id="connDot"></span><span id="connText">Connecting</span></span>
+    <button class="btn" id="whoBtn" title="Who you are, shown to the others">Set your name</button>
     <button class="btn accent" id="btnRefresh">Refresh</button>
     <button class="btn" id="btnClear">Clear shift</button>
     <button class="btn" id="btnCSV">Export CSV</button>
@@ -274,12 +278,9 @@ body {
 </div>
 
 <div id="legend">
-  <span style="font:700 9px/1 Arial,sans-serif;letter-spacing:.9px;text-transform:uppercase;color:var(--muted)">Employment</span>
-  <span class="leg"><span class="leg-bar" style="background:var(--perm)"></span>Permanent</span>
-  <span class="leg"><span class="leg-bar" style="background:var(--temp)"></span>Temp</span>
-  <span class="leg"><span class="leg-bar" style="background:var(--contr)"></span>Contractor</span>
-  <span class="leg"><span class="leg-bar" style="background:var(--unk)"></span>Not confirmed</span>
-  <span class="leg-hint">Click the type chip on a card to change it. Changes save for everyone.</span>
+  <span style="font:700 9px/1 Arial,sans-serif;letter-spacing:.9px;text-transform:uppercase;color:var(--muted)">Workforce</span>
+  <span id="headcount"></span>
+  <span class="leg-hint">Click the type chip on any card to set Perm, Casual, Temp or Contractor. Saves for everyone.</span>
 </div>
 
 <div id="layout">
@@ -376,9 +377,11 @@ var ROLES = [
   { id: 'overpacker-2l',            label: '2L Overpacker (Float)',         area: 'float'  }
 ];
 
-var TYPE_LABEL = { permanent: 'Permanent', temp: 'Temp', contractor: 'Contractor', unknown: 'Not confirmed' };
-var TYPE_SHORT = { permanent: 'Perm', temp: 'Temp', contractor: 'Contr', unknown: 'Set type' };
-var TYPE_CYCLE = ['unknown', 'permanent', 'temp', 'contractor'];
+var TYPE_LABEL = { permanent: 'Permanent', casual: 'Casual', temp: 'Temp',
+                   contractor: 'Contractor', unknown: 'Not confirmed' };
+var TYPE_SHORT = { permanent: 'Perm', casual: 'Casual', temp: 'Temp',
+                   contractor: 'Contr', unknown: 'Set type' };
+var TYPE_CYCLE = ['unknown', 'permanent', 'casual', 'temp', 'contractor'];
 
 // Nothing is hardcoded. Both arrive from Supabase on load.
 var people = [];
@@ -386,6 +389,32 @@ var roster  = { day: {}, afternoon: {}, night: {} };
 
 var selPersonId = null, selFromSlot = null;
 var dragPersonId = null, dragFromSlot = null;
+
+// Who is using this browser. Not authentication: it is attribution, so three
+// people planning the same roster can see who moved whom. Stored per browser.
+var me = '';
+try { me = localStorage.getItem('abh-roster-user') || ''; } catch (e) {}
+
+function askWhoIAm(force) {
+  var v = prompt('Your name, so the others can see who moved what:', me || '');
+  if (v === null) return;
+  v = v.trim().slice(0, 40);
+  if (!v) return;
+  me = v;
+  try { localStorage.setItem('abh-roster-user', me); } catch (e) {}
+  document.getElementById('whoBtn').textContent = me;
+}
+
+// Fingerprint of the assignment set, used to detect somebody else's change.
+var lastSig = '';
+function rosterSig(rows) {
+  return rows.map(function (a) {
+    return a.shift_id + ':' + a.role_id + '=' + a.person_id;
+  }).sort().join('|');
+}
+
+// When a slot last changed and by whom, keyed 'shift:role'.
+var slotMeta = {};
 
 function getPerson(id) {
   for (var i = 0; i < people.length; i++) { if (people[i].id === id) return people[i]; }
@@ -421,17 +450,26 @@ function toast(msg, kind) {
 
 // ── LOAD ────────────────────────────────────────────────────────────────────
 
+function applyAssignments(rows) {
+  roster = { day: {}, afternoon: {}, night: {} };
+  slotMeta = {};
+  rows.forEach(function(a) {
+    if (roster[a.shift_id] && a.person_id) {
+      roster[a.shift_id][a.role_id] = a.person_id;
+      slotMeta[a.shift_id + ':' + a.role_id] = { by: a.updated_by, at: a.updated_at };
+    }
+  });
+  lastSig = rosterSig(rows);
+}
+
 function loadAll() {
   conn('loading', 'Loading');
   return Promise.all([
     sbGet('roster_people?select=id,name,line,cohort,emp_type&active=is.true&order=sort_order'),
-    sbGet('roster_assignments?select=shift_id,role_id,person_id')
+    sbGet('roster_assignments?select=shift_id,role_id,person_id,updated_by,updated_at')
   ]).then(function(res) {
     people = res[0];
-    roster = { day: {}, afternoon: {}, night: {} };
-    res[1].forEach(function(a) {
-      if (roster[a.shift_id] && a.person_id) roster[a.shift_id][a.role_id] = a.person_id;
-    });
+    applyAssignments(res[1]);
     conn('live', 'Live');
     renderAll();
   })['catch'](function(err) {
@@ -440,6 +478,39 @@ function loadAll() {
     toast('Could not reach Supabase (' + err.message + ')', 'err');
   });
 }
+
+// ── LIVE SYNC ───────────────────────────────────────────────────────────────
+// The roster tables are not in the Supabase realtime publication, so this polls
+// instead. Every 5s it re-reads assignments and only re-renders when the set
+// actually differs, so it will not fight a drag in progress.
+var POLL_MS = 5000;
+var pollTimer = null;
+var pausePolling = false;
+
+function pollOnce() {
+  if (pausePolling || document.hidden) return;
+  sbGet('roster_assignments?select=shift_id,role_id,person_id,updated_by,updated_at')
+    .then(function(rows) {
+      var sig = rosterSig(rows);
+      if (sig === lastSig) { conn('live', 'Live'); return; }
+      var whoList = rows.map(function(r) { return r.updated_by; })
+                        .filter(function(w) { return w && w !== me; });
+      applyAssignments(rows);
+      renderAll();
+      conn('live', 'Live');
+      toast(whoList.length ? 'Updated by ' + whoList[whoList.length - 1] : 'Roster updated');
+    })['catch'](function() {
+      conn('offline', 'Offline');
+    });
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollOnce, POLL_MS);
+}
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden) pollOnce();
+});
 
 // ── WRITES ──────────────────────────────────────────────────────────────────
 
@@ -450,10 +521,12 @@ function assign(personId, shiftId, roleId, fromSlot) {
     if (roster[f[0]] && roster[f[0]][f[1]] === personId) delete roster[f[0]][f[1]];
   }
   roster[shiftId][roleId] = personId;
+  slotMeta[shiftId + ':' + roleId] = { by: me, at: new Date().toISOString() };
   selPersonId = null; selFromSlot = null;
   renderAll();
 
   conn('saving', 'Saving');
+  pausePolling = true;
   var chain = fromSlot
     ? sbSend('DELETE', 'roster_assignments?shift_id=eq.' + fromSlot.split(':')[0] +
                        '&role_id=eq.' + encodeURIComponent(fromSlot.split(':')[1]))
@@ -461,13 +534,17 @@ function assign(personId, shiftId, roleId, fromSlot) {
 
   chain.then(function() {
     return sbSend('POST', 'roster_assignments',
-      { shift_id: shiftId, role_id: roleId, person_id: personId });
+      { shift_id: shiftId, role_id: roleId, person_id: personId,
+        updated_by: me || null, updated_at: new Date().toISOString() });
   }).then(function() {
     conn('live', 'Live');
+    pausePolling = false;
+    pollOnce();
   })['catch'](function(err) {
     roster = JSON.parse(prev);
     renderAll();
     conn('offline', 'Save failed');
+    pausePolling = false;
     toast('Not saved: ' + err.message, 'err');
   });
 }
@@ -479,13 +556,15 @@ function unassign(shiftId, roleId) {
   renderAll();
 
   conn('saving', 'Saving');
+  pausePolling = true;
   sbSend('DELETE', 'roster_assignments?shift_id=eq.' + shiftId +
                    '&role_id=eq.' + encodeURIComponent(roleId))
-    .then(function() { conn('live', 'Live'); })
+    .then(function() { conn('live', 'Live'); pausePolling = false; pollOnce(); })
     ['catch'](function(err) {
       roster = JSON.parse(prev);
       renderAll();
       conn('offline', 'Save failed');
+      pausePolling = false;
       toast('Not saved: ' + err.message, 'err');
     });
 }
@@ -646,6 +725,12 @@ function renderShifts() {
         if (person) {
           slot.classList.add('filled');
           var card = buildPersonCard(person, shift.id + ':' + role.id);
+          var m = slotMeta[shift.id + ':' + role.id];
+          if (m && m.by) {
+            card.title = person.name + ' placed here by ' + m.by
+                       + (m.at ? ' at ' + new Date(m.at).toLocaleString('en-AU',
+                           { timeZone: 'Australia/Brisbane' }) : '');
+          }
           var rm = document.createElement('button');
           rm.className = 'remove-btn';
           rm.textContent = 'x';
@@ -716,7 +801,30 @@ function renderStats() {
   if (ct.unknown)    pill('unconf',     'var(--unk)',   ct.unknown);
 }
 
-function renderAll() { renderPool(); renderShifts(); renderStats(); }
+// Headcount across the WHOLE workforce, not just who is rostered. This answers
+// "how many perms, how many casuals, what temps have I got".
+function renderHeadcount() {
+  var el = document.getElementById('headcount');
+  if (!el) return;
+  var ct = { permanent: 0, casual: 0, temp: 0, contractor: 0, unknown: 0 };
+  people.forEach(function(p) {
+    var t = p.emp_type || 'unknown';
+    ct[t] = (ct[t] || 0) + 1;
+  });
+  var order = [
+    ['permanent',  'Perm',        'var(--perm)'],
+    ['casual',     'Casual',      'var(--casual)'],
+    ['temp',       'Temp',        'var(--temp)'],
+    ['contractor', 'Contractor',  'var(--contr)'],
+    ['unknown',    'Not set',     'var(--unk)']
+  ];
+  el.innerHTML = order.map(function(o) {
+    return '<span class="leg"><span class="leg-bar" style="background:' + o[2] + '"></span>'
+         + '<b style="font-variant-numeric:tabular-nums">' + ct[o[0]] + '</b> ' + o[1] + '</span>';
+  }).join('') + '<span class="leg" style="color:var(--muted)">of ' + people.length + ' total</span>';
+}
+
+function renderAll() { renderPool(); renderShifts(); renderStats(); renderHeadcount(); }
 
 // ── POOL AS UNASSIGN TARGET ─────────────────────────────────────────────────
 
@@ -782,8 +890,14 @@ document.getElementById('btnClear').addEventListener('click', clearShift);
 document.getElementById('btnCSV').addEventListener('click', exportCSV);
 document.getElementById('btnPrint').addEventListener('click', function() { window.print(); });
 
+document.getElementById('whoBtn').addEventListener('click', function() { askWhoIAm(true); });
+if (me) document.getElementById('whoBtn').textContent = me;
+
 renderAll();
-loadAll();
+loadAll().then(function() {
+  startPolling();
+  if (!me) askWhoIAm(false);
+});
 </script>
 </body>
 </html>
