@@ -196,7 +196,30 @@ body {
   font: 700 9px/1 Arial, sans-serif; letter-spacing: .9px; text-transform: uppercase;
   color: var(--muted); padding-bottom: 4px;
   border-bottom: 1px solid var(--border); margin-bottom: 4px;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
 }
+.area-count {
+  font-variant-numeric: tabular-nums; letter-spacing: 0;
+  text-transform: none; font-size: 10px; white-space: nowrap;
+}
+.area-count[data-state="ok"]    { color: var(--perm); }
+.area-count[data-state="short"] { color: var(--temp); }
+.area-count[data-state="empty"] { color: var(--vacant-txt); }
+.area-short { font-weight: 400; }
+
+/* Per-shift employment mix, sits under each shift header */
+.shift-mix {
+  display: flex; flex-wrap: wrap; gap: 4px 8px;
+  padding: 5px 11px; flex-shrink: 0;
+  background: var(--surface2); border-bottom: 1px solid var(--border);
+}
+.mix-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font: 700 10px/1 Arial, sans-serif; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.mix-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
 .area-slots { display: flex; flex-direction: column; gap: 3px; }
 
 .slot-label {
@@ -359,14 +382,15 @@ var SHIFTS = [
   { id: 'night',     label: 'Night Shift' }
 ];
 
+// `crew` is the people required to run that line on a shift (Rob 02/09/2026).
 var AREAS = [
-  { id: 'mgmt',   label: 'Shift Management' },
-  { id: 'maint',  label: 'Maintenance' },
-  { id: 'hmps',   label: 'HMPS' },
-  { id: 'lineab', label: 'Line A / B' },
-  { id: 'bottle', label: 'Bottle Line' },
-  { id: 'fork',   label: 'Forklift' },
-  { id: 'float',  label: 'Float' }
+  { id: 'mgmt',   label: 'Shift Management', crew: 1 },
+  { id: 'maint',  label: 'Maintenance',      crew: 1 },
+  { id: 'hmps',   label: 'HMPS',             crew: 3 },
+  { id: 'lineab', label: 'Line A / B',       crew: 4 },
+  { id: 'bottle', label: 'Bottle Line',      crew: 5 },
+  { id: 'fork',   label: 'Forklift',         crew: 3 },
+  { id: 'float',  label: '2L Line',          crew: 7 }
 ];
 
 var ROLES = [
@@ -387,8 +411,15 @@ var ROLES = [
   { id: 'feed-forklift',            label: 'Production Feed Forklift',      area: 'fork'   },
   { id: 'wrap-forklift-1',          label: 'Pallet Wrap Forklift',          area: 'fork'   },
   { id: 'wrap-forklift-2',          label: 'Pallet Wrap Forklift',          area: 'fork'   },
+  // 2L line runs a crew of 7. The two named roles are Rob's; the five below are
+  // placeholder slots so seven people can actually be rostered. Rename on request.
+  { id: 'bottle-filler-2l-float',   label: '2L Bottle Filler / Floater',    area: 'float'  },
   { id: 'overpacker-2l',            label: '2L Overpacker (Float)',         area: 'float'  },
-  { id: 'bottle-filler-2l-float',   label: '2L Bottle Filler / Floater',    area: 'float'  }
+  { id: 'operator-2l-1',            label: '2L Operator',                   area: 'float'  },
+  { id: 'operator-2l-2',            label: '2L Operator',                   area: 'float'  },
+  { id: 'operator-2l-3',            label: '2L Operator',                   area: 'float'  },
+  { id: 'packoff-2l-1',             label: '2L Pack Off',                   area: 'float'  },
+  { id: 'packoff-2l-2',             label: '2L Pack Off',                   area: 'float'  }
 ];
 
 var TYPE_LABEL = { permanent: 'Permanent', casual: 'Casual', temp: 'Temp',
@@ -737,9 +768,32 @@ function renderShifts() {
 
     var hdr = document.createElement('div');
     hdr.className = 'shift-hdr';
+    // Type mix on this shift, so the perm/casual/temp split is visible per shift.
+    var mix = { permanent: 0, casual: 0, temp: 0, contractor: 0, unknown: 0 };
+    Object.values(roster[shift.id]).forEach(function(pid) {
+      var p = getPerson(pid);
+      if (p) { var t = p.emp_type || 'unknown'; mix[t] = (mix[t] || 0) + 1; }
+    });
+
     hdr.innerHTML = '<span>' + esc(shift.label) + '</span><span class="shift-ct">'
                   + filled + '/' + ROLES.length + ' filled</span>';
     col.appendChild(hdr);
+
+    var mixBar = document.createElement('div');
+    mixBar.className = 'shift-mix';
+    var mixOrder = [
+      ['permanent',  'perm',   'var(--perm)'],
+      ['casual',     'casual', 'var(--casual)'],
+      ['temp',       'temp',   'var(--temp)'],
+      ['contractor', 'contr',  'var(--contr)'],
+      ['unknown',    'not set','var(--unk)']
+    ];
+    mixBar.innerHTML = mixOrder.filter(function(o) { return mix[o[0]]; })
+      .map(function(o) {
+        return '<span class="mix-chip"><span class="mix-dot" style="background:' + o[2]
+             + '"></span>' + mix[o[0]] + ' ' + o[1] + '</span>';
+      }).join('') || '<span class="mix-chip" style="color:var(--vacant-txt)">nobody rostered yet</span>';
+    col.appendChild(mixBar);
 
     var body = document.createElement('div');
     body.className = 'shift-body';
@@ -748,10 +802,22 @@ function renderShifts() {
       var areaRoles = ROLES.filter(function(r) { return r.area === areaObj.id; });
       if (!areaRoles.length) return;
 
+      // Filled against the crew this line needs, so a short shift is obvious.
+      var areaFilled = areaRoles.filter(function(r) {
+        return !!roster[shift.id][r.id];
+      }).length;
+      var crew  = areaObj.crew || areaRoles.length;
+      var short = crew - areaFilled;
+
       var section = document.createElement('div');
       var aHdr = document.createElement('div');
       aHdr.className = 'area-hdr';
-      aHdr.textContent = areaObj.label;
+      aHdr.innerHTML = '<span>' + esc(areaObj.label) + '</span>'
+        + '<span class="area-count" data-state="'
+        + (areaFilled >= crew ? 'ok' : areaFilled === 0 ? 'empty' : 'short') + '">'
+        + areaFilled + '/' + crew
+        + (short > 0 ? ' <span class="area-short">(' + short + ' short)</span>' : '')
+        + '</span>';
       section.appendChild(aHdr);
 
       var slots = document.createElement('div');
