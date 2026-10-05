@@ -770,7 +770,7 @@ function renderShifts() {
   area.innerHTML = '';
 
   SHIFTS.forEach(function(shift) {
-    var filled = Object.keys(roster[shift.id]).length;
+    var filled = ROLES.filter(function(r) { return roster[shift.id][r.id]; }).length;
     var col = document.createElement('div');
     col.className = 'shift-col';
 
