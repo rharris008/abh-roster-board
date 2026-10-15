@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ABH Shift Roster Board</title>
 <style>
+/* ════ CSS VARIABLES + DARK MODE ════════════════════════════════════════════ */
 :root {
   --navy:       #1B2A4A;
   --blue:       #0E7CCE;
@@ -35,6 +36,7 @@
   --text: #D8E6F2; --muted: #7A96B2; --vacant-bd: #2E4060; --vacant-txt: #5A7090;
 }
 
+/* ════ RESET + BASE ══════════════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -42,7 +44,7 @@ body {
   font-size: 13px; height: 100dvh; display: flex; flex-direction: column; overflow: hidden;
 }
 
-/* HEADER */
+/* ════ HEADER BAR ════════════════════════════════════════════════════════════ */
 #hdr {
   background: var(--navy); color: #fff; padding: 8px 14px;
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
@@ -86,7 +88,7 @@ body {
 #conn[data-state="saving"]  #connDot { background: var(--temp); }
 #conn[data-state="offline"] #connDot { background: var(--red); }
 
-/* LEGEND */
+/* ════ LEGEND BAR ════════════════════════════════════════════════════════════ */
 #legend {
   background: var(--surface); border-bottom: 1px solid var(--border);
   padding: 5px 14px; display: flex; gap: 14px; align-items: center;
@@ -96,10 +98,10 @@ body {
 .leg-bar { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
 .leg-hint { font-size: 10px; color: var(--muted); margin-left: auto; }
 
-/* LAYOUT */
+/* ════ MAIN LAYOUT ═══════════════════════════════════════════════════════════ */
 #layout { flex: 1; display: flex; overflow: hidden; min-height: 0; }
 
-/* POOL */
+/* ════ POOL SIDEBAR ══════════════════════════════════════════════════════════ */
 #pool {
   width: 208px; flex-shrink: 0; background: var(--surface);
   border-right: 1px solid var(--border); display: flex;
@@ -139,7 +141,7 @@ body {
   font-size: 11px; line-height: 1.7;
 }
 
-/* PERSON CARD */
+/* ════ PERSON CARD ════════════════════════════════════════════════════════════ */
 .pcard {
   background: var(--surface); border: 1px solid var(--border);
   border-left: 4px solid var(--unk); border-radius: 3px; padding: 5px 8px;
@@ -174,7 +176,7 @@ body {
 .pcard[data-type="temp"]       .pc-type { color: var(--temp);   border-color: var(--temp); }
 .pcard[data-type="contractor"] .pc-type { color: var(--contr);  border-color: var(--contr); }
 
-/* SHIFTS */
+/* ════ SHIFT COLUMNS ═════════════════════════════════════════════════════════ */
 #shifts { flex: 1; display: flex; overflow-x: auto; overflow-y: hidden; min-width: 0; }
 .shift-col {
   min-width: 232px; flex: 1; border-right: 1px solid var(--border);
@@ -228,6 +230,7 @@ body {
 .mix-chip.rollup[data-state="ok"]    { color: var(--perm); border-color: var(--perm); }
 .mix-chip.rollup[data-state="short"] { color: var(--temp); border-color: var(--temp); }
 
+/* ════ SLOTS ══════════════════════════════════════════════════════════════════ */
 .area-slots { display: flex; flex-direction: column; gap: 3px; }
 
 .slot-label {
@@ -255,6 +258,7 @@ body {
 }
 .remove-btn:hover { background: var(--red); }
 
+/* ════ TOAST NOTIFICATION ════════════════════════════════════════════════════ */
 #toast {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
   background: var(--navy); color: #fff; padding: 8px 18px; border-radius: 4px;
@@ -264,8 +268,10 @@ body {
 #toast.show { opacity: 1; }
 #toast[data-kind="err"] { background: var(--red); }
 
+/* ════ ACCESSIBILITY ══════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
+/* ════ PRINT ══════════════════════════════════════════════════════════════════ */
 @media print {
   body { height: auto; overflow: visible; background: #fff; color: #000; }
   #layout { display: block; height: auto; overflow: visible; }
@@ -277,6 +283,7 @@ body {
   .shift-hdr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
+/* ════ MOBILE (≤600px) ════════════════════════════════════════════════════════ */
 @media (max-width: 600px) {
   body { height: auto; overflow: auto; }
   #layout { flex-direction: column; overflow: visible; height: auto; }
@@ -292,6 +299,7 @@ body {
 </head>
 <body>
 
+<!-- ══════════════ SECTION: Header bar ══════════════ -->
 <div id="hdr">
   <div class="hdr-left">
     <span class="hdr-brand">ABH Pureau</span>
@@ -309,12 +317,14 @@ body {
   </div>
 </div>
 
+<!-- ══════════════ SECTION: Legend / workforce type key ══════════════ -->
 <div id="legend">
   <span style="font:700 9px/1 Arial,sans-serif;letter-spacing:.9px;text-transform:uppercase;color:var(--muted)">Workforce</span>
   <span id="headcount"></span>
   <span class="leg-hint">Click the type chip on any card to set Perm, Casual, Temp or Contractor. Saves for everyone.</span>
 </div>
 
+<!-- ══════════════ SECTION: Main layout — pool sidebar + shift columns ══════════════ -->
 <div id="layout">
   <div id="pool">
     <div class="pool-hdr">People Pool</div>
@@ -334,6 +344,7 @@ body {
   <div id="shifts"></div>
 </div>
 
+<!-- ══════════════ SECTION: Toast notification ══════════════ -->
 <div id="toast"></div>
 
 <script>
